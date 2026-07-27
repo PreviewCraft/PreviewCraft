@@ -1,0 +1,24 @@
+services:
+    frontend:
+        build:
+            context: /PreviewCraft-Frontend
+            dockerfile: Dockerfile
+        networks:
+            - MY_net
+        ports:
+            - "8082:8080"
+        
+
+    backend:
+        build:
+            context: /PreviewCraft-Backend
+            dockerfile: Dockerfile
+        networks:
+            - MY_net
+        env_file:
+            - /PreviewCraft-Backend/.env
+        ports: 
+            - "5000:5000"
+
+networks:
+    MY_net:
