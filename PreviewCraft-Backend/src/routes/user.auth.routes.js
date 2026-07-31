@@ -5,7 +5,7 @@ import { verifyJWT } from "../middlewares/auth.middleware.js";
 
 const router = Router()
 
-router.route("/register").post(
+router.route("/auth/register").post(
     upload.fields([
         {
             name: "avatar",
@@ -15,36 +15,36 @@ router.route("/register").post(
     registerUser
 )
 
-router.route("/login").post(
+router.route("/auth/login").post(
     loginUser
 )
 
 
-router.route("/logout").post(
+router.route("/auth/logout").post(
     verifyJWT,
     logoutUser
 )
 
-router.route("/refreshToken").post(
+router.route("/auth/refreshToken").post(
     refreshAccessToken
 )
 
-router.route("/changePassword").patch(
+router.route("/auth/changePassword").patch(
     verifyJWT,
     changeUserPassword
 )
 
-router.route("/userDetails").get(
+router.route("/auth/userDetails").get(
     verifyJWT,
     getCurrentUser
 )
 
-router.route("/updateUserDetails").patch(
+router.route("/auth/updateUserDetails").patch(
     verifyJWT,
     updateUserDetails
 )
 
-router.route("/updateImageFiles").patch(
+router.route("/auth/updateImageFiles").patch(
     verifyJWT,
     upload.fields([
         {
@@ -55,24 +55,24 @@ router.route("/updateImageFiles").patch(
     updateUserAvatarImage
 )
 
-router.route("/verify-email/:token").get(
+router.route("/auth/verify-email/:token").get(
     verifyEmail
 )
 
-router.route("/deleteAccount").delete(
+router.route("/auth/deleteAccount").delete(
     verifyJWT,
     deleteAccount
 )
 
-router.route("/google-login").post(
+router.route("/auth/google-login").post(
     googleLogin
 );
 
-router.route("/forgotPassword").post(
+router.route("/auth/forgotPassword").post(
     forgotPassword
 );
 
-router.route("/resetPassword/:token").post(
+router.route("/auth/resetPassword/:token").post(
     resetPassword
 );
 export default router

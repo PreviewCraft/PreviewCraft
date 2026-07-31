@@ -29,7 +29,9 @@ const userSchema = new mongoose.Schema({
     },
     password: {
         type: String,
-        required: [true, 'Password is required']
+        required: function () {
+            return this.provider === "local";
+        }
     },
     refreshToken: {
         type: String,
@@ -53,15 +55,24 @@ const userSchema = new mongoose.Schema({
 
     provider: {
         type: String,
-        enum: ["local", "google"],
+        enum: ["local", "google", "github"],
         default: "local"
     },
     passwordResetToken: {
         type: String,
     },
-
     passwordResetExpiry: {
         type: Date,
+    },
+    githubId: {
+        type: String,
+        unique: true,
+        sparse: true,
+        default: undefined,
+    },
+    githubUsername: {
+        type: String,
+        default: null,
     },
 }, {
     timestamps: true

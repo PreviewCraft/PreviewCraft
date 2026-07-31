@@ -504,5 +504,6 @@ export {
     deleteAccount,
     googleLogin,
     forgotPassword,
-    resetPassword
+    resetPassword,
+    generateAccessAndRefreshToken
 }

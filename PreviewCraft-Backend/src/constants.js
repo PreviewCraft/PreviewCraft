@@ -1,1 +1,1 @@
-export const DB_NAME="mern-auth-api-db";
+export const DB_NAME="PreviewCraft-db";

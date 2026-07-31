@@ -15,8 +15,10 @@ app.use(cookieParser())
 
 //routes import
 import userRouter from "./routes/user.auth.routes.js"
+import githubAuthRouter from "./routes/github.routes.js";
 
 //routes declaration
-app.use("/api/auth/users", userRouter)
+app.use("/api/v1", userRouter)
+app.use("/api/v1/auth", githubAuthRouter);
 
 export { app };
