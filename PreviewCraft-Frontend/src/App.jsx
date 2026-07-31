@@ -1,9 +1,12 @@
-import React from 'react'
+import { Routes, Route } from "react-router-dom";
+import LandingPage from "./pages/LandingPage";
 
 function App() {
   return (
-    <div className='bg-amber-400'>App</div>
-  )
+    <Routes>
+      <Route path="/" element={<LandingPage />} />
+    </Routes>
+  );
 }
 
-export default App
+export default App;

@@ -1,1 +1,46 @@
 @import "tailwindcss";
+
+@theme {
+    --color-ink: #0B0B0D;
+    --color-ink2: #F4F4F6;
+    --color-surface: #141417;
+    --color-surface2: #1C1C21;
+    --color-line: #27272C;
+    --color-muted: #97979F;
+
+    --color-pink: #FF4D94;
+    --color-pink-dim: #7A2C4C;
+    --color-green: #35D48C;
+    --color-green-dim: #1F5C41;
+
+    --font-display: "Space Grotesk", sans-serif;
+    --font-body: "Inter", sans-serif;
+    --font-mono: "JetBrains Mono", monospace;
+}
+
+body {
+    margin: 0;
+    background-color: var(--color-ink);
+}
+
+@keyframes float {
+
+    0%,
+    100% {
+        transform: translateY(0);
+    }
+
+    50% {
+        transform: translateY(-8px);
+    }
+}
+
+.animate-float {
+    animation: float 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .animate-float {
+        animation: none;
+    }
+}
