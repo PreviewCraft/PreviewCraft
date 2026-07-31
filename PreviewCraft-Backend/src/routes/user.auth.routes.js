@@ -55,9 +55,9 @@ router.route("/auth/updateImageFiles").patch(
     updateUserAvatarImage
 )
 
-router.route("/auth/verify-email/:token").get(
+router.route("/auth/verify-email").post(
     verifyEmail
-)
+);
 
 router.route("/auth/deleteAccount").delete(
     verifyJWT,
@@ -72,7 +72,7 @@ router.route("/auth/forgotPassword").post(
     forgotPassword
 );
 
-router.route("/auth/resetPassword/:token").post(
+router.route("/auth/resetPassword").post(
     resetPassword
 );
 export default router

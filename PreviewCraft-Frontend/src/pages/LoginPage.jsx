@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
     FiMail,
     FiLock,
@@ -11,7 +12,8 @@ import {
     FiTerminal,
 } from "react-icons/fi";
 import { FaGithub, FaGoogle } from "react-icons/fa";
-
+import { loginUser, getGithubAuthUrl, googleLogin } from "../api/authApi.js";
+import { GoogleLogin } from "@react-oauth/google";
 
 const INITIAL_LOGS = [
     { text: "$ previewcraft auth --init", tone: "cmd" },
@@ -57,7 +59,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [logs, setLogs] = useState(INITIAL_LOGS);
-    const [status, setStatus] = useState("idle"); 
+    const [status, setStatus] = useState("idle");
     const loggedFocus = useRef({ email: false, password: false });
     const logRef = useRef(null);
 
@@ -77,26 +79,90 @@ export default function LoginPage() {
         );
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
         if (!email || !password) {
             pushLog("✗ missing credentials", "error");
             setStatus("error");
+            toast.error("Please enter both email and password");
             return;
         }
+
         setStatus("loading");
         pushLog("→ verifying credentials...", "muted");
-        setTimeout(() => {
+
+        try {
+            const res = await loginUser({ email, password });
             pushLog("✓ session authenticated", "ok");
             pushLog(`✓ redirecting to dashboard as ${email}`, "ok");
             setStatus("ok");
-            setTimeout(() => navigate("/"), 500);
-        }, 1100);
+            toast.success(res?.data?.message || "Welcome back!");
+            setTimeout(() => navigate("/home-previewcraft"), 500);
+        } catch (err) {
+            const message =
+                err?.response?.data?.message || "Login failed. Please try again.";
+            pushLog(`✗ ${message}`, "error");
+            setStatus("error");
+            toast.error(message);
+        }
     };
 
-    const handleOAuth = (provider) => {
-        pushLog(`$ previewcraft auth --provider=${provider}`, "cmd");
-        pushLog(`→ opening ${provider} oauth handshake...`, "muted");
+    const handleGithubAuth = () => {
+        pushLog("$ previewcraft auth --provider=github", "cmd");
+        pushLog("→ opening github oauth handshake...", "muted");
+        window.location.href = getGithubAuthUrl();
+    };
+
+    const handleGoogleSuccess = async (credentialResponse) => {
+        try {
+            const idToken = credentialResponse.credential;
+
+            if (!idToken) {
+                throw new Error("Google did not return an ID token");
+            }
+
+            setStatus("loading");
+
+            pushLog(
+                "$ previewcraft auth --provider=google",
+                "cmd"
+            );
+
+            pushLog(
+                "→ verifying google credentials...",
+                "muted"
+            );
+
+            const res = await googleLogin(idToken);
+
+            pushLog(
+                "✓ google session authenticated",
+                "ok"
+            );
+
+            setStatus("ok");
+
+            toast.success(
+                res?.data?.message ||
+                "Google login successful"
+            );
+
+            navigate("/home-previewcraft");
+
+        } catch (err) {
+            console.error("GOOGLE LOGIN ERROR:", err);
+
+            const message =
+                err?.response?.data?.message ||
+                err?.message ||
+                "Google login failed";
+
+            pushLog(`✗ ${message}`, "error");
+
+            setStatus("error");
+
+            toast.error(message);
+        }
     };
 
     return (
@@ -141,7 +207,6 @@ export default function LoginPage() {
                     </p>
                 </div>
 
-                {/* mini animated deploy strip, echoes the landing-page terminal */}
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -229,12 +294,12 @@ export default function LoginPage() {
                                     />
                                     remember this device
                                 </label>
-                                <a
-                                    href="#forgot-password"
+                                <Link
+                                    to="/forgot-password"
                                     className="font-mono text-[11px] text-pink hover:underline"
                                 >
                                     forgot password?
-                                </a>
+                                </Link>
                             </div>
 
                             <motion.button
@@ -264,20 +329,38 @@ export default function LoginPage() {
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 type="button"
-                                onClick={() => handleOAuth("github")}
+                                onClick={handleGithubAuth}
                                 className="flex items-center justify-center gap-2 rounded-md border border-line bg-surface2 py-2.5 text-sm text-ink2 transition-colors hover:border-muted"
                             >
                                 <FaGithub size={16} />
                                 GitHub
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => handleOAuth("google")}
-                                className="flex items-center justify-center gap-2 rounded-md border border-line bg-surface2 py-2.5 text-sm text-ink2 transition-colors hover:border-muted"
-                            >
-                                <FaGoogle size={15} />
-                                Google
-                            </button>
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    className="pointer-events-none flex w-full items-center justify-center gap-2 rounded-md border border-line bg-surface2 py-2.5 text-sm text-ink2 transition-colors"
+                                >
+                                    <FaGoogle size={16} />
+                                    Google
+                                </button>
+                                <div className="absolute inset-0 overflow-hidden opacity-0">
+                                    <GoogleLogin
+                                        onSuccess={handleGoogleSuccess}
+                                        onError={() => {
+                                            pushLog(
+                                                "✗ google authentication failed",
+                                                "error"
+                                            );
+                                            setStatus("error");
+                                            toast.error(
+                                                "Google authentication failed"
+                                            );
+                                        }}
+                                        useOneTap={false}
+                                        width="500"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
                         <div

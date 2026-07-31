@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link, useNavigate } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
     FiUser,
     FiMail,
@@ -12,6 +14,9 @@ import {
     FiCheck,
 } from "react-icons/fi";
 import { FaGithub, FaGoogle } from "react-icons/fa";
+import { registerUser, getGithubAuthUrl, googleLogin } from "../api/authApi.js";
+import { GoogleLogin } from "@react-oauth/google";
+
 const INITIAL_LOGS = [
     { text: "$ previewcraft account --create", tone: "cmd" },
     { text: "→ waiting for account details...", tone: "muted" },
@@ -57,22 +62,24 @@ function scorePassword(pw) {
     if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
     if (/[0-9]/.test(pw)) score++;
     if (/[^A-Za-z0-9]/.test(pw)) score++;
-    return Math.min(score, 4); // 0-4
+    return Math.min(score, 4);
 }
 
 const STRENGTH_LABEL = ["weak", "weak", "fair", "strong", "solid"];
 
 export default function RegisterPage() {
     const [name, setName] = useState("");
+    const [username, setUsername] = useState("");
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
     const [confirm, setConfirm] = useState("");
     const [showPassword, setShowPassword] = useState(false);
     const [agreed, setAgreed] = useState(false);
     const [logs, setLogs] = useState(INITIAL_LOGS);
-    const [status, setStatus] = useState("idle"); 
-    const loggedFocus = useRef({ name: false, email: false, password: false });
+    const [status, setStatus] = useState("idle");
+    const loggedFocus = useRef({ name: false, username: false, email: false, password: false });
     const logRef = useRef(null);
+    const navigate = useNavigate();
 
     const strength = useMemo(() => scorePassword(password), [password]);
 
@@ -88,42 +95,122 @@ export default function RegisterPage() {
         loggedFocus.current[field] = true;
         const copy = {
             name: "→ reading account name...",
+            username: "→ reading username...",
             email: "→ reading email input...",
             password: "→ reading password input...",
         };
         pushLog(copy[field], "muted");
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        if (!name || !email || !password || !confirm) {
+        if (!name || !username || !email || !password || !confirm) {
             pushLog("✗ missing required fields", "error");
             setStatus("error");
+            toast.error("Please fill in all fields");
             return;
         }
         if (password !== confirm) {
             pushLog("✗ password confirmation does not match", "error");
             setStatus("error");
+            toast.error("Passwords don't match");
             return;
         }
         if (!agreed) {
             pushLog("✗ terms of service not accepted", "error");
             setStatus("error");
+            toast.error("Please accept the terms to continue");
             return;
         }
 
         setStatus("loading");
         pushLog("→ validating credentials...", "muted");
-        setTimeout(() => {
+
+        try {
+            const res = await registerUser({
+                fullname: name,
+                username,
+                email,
+                password,
+            });
             pushLog("✓ workspace provisioned", "ok");
             pushLog(`✓ account created for ${email}`, "ok");
             setStatus("ok");
-        }, 1100);
+            toast.success(res?.data?.message || "Account created! Check your email to verify it.");
+            navigate("/verify-email", {
+                state: {
+                    email,
+                },
+            });
+        } catch (err) {
+            const message =
+                err?.response?.data?.message || "Registration failed. Please try again.";
+            pushLog(`✗ ${message}`, "error");
+            setStatus("error");
+            toast.error(message);
+        }
     };
 
-    const handleOAuth = (provider) => {
-        pushLog(`$ previewcraft account --create --provider=${provider}`, "cmd");
-        pushLog(`→ opening ${provider} oauth handshake...`, "muted");
+    const handleGoogleSuccess = async (credentialResponse) => {
+        try {
+            const idToken = credentialResponse.credential;
+
+            if (!idToken) {
+                throw new Error("Google did not return an ID token");
+            }
+
+            setStatus("loading");
+
+            pushLog(
+                "$ previewcraft account --create --provider=google",
+                "cmd"
+            );
+
+            pushLog(
+                "→ verifying google credentials...",
+                "muted"
+            );
+
+            const res = await googleLogin(idToken);
+
+            pushLog(
+                "✓ google authentication successful",
+                "ok"
+            );
+
+            setStatus("ok");
+
+            toast.success(
+                res?.data?.message ||
+                "Google authentication successful"
+            );
+
+            navigate("/home-previewcraft");
+
+        } catch (err) {
+            console.error("GOOGLE AUTH ERROR:", err);
+
+            const message =
+                err?.response?.data?.message ||
+                err?.message ||
+                "Google authentication failed";
+
+            pushLog(`✗ ${message}`, "error");
+
+            setStatus("error");
+
+            toast.error(message);
+        }
+    };
+
+    const handleGithubAuth = () => {
+        pushLog("$ previewcraft auth --provider=github", "cmd");
+        pushLog("→ opening github oauth handshake...", "muted");
+        window.location.href = getGithubAuthUrl();
+    };
+
+    const handleGoogleAuth = () => {
+        toast("Google sign-up isn't wired up yet", { icon: "🚧" });
     };
 
     return (
@@ -218,8 +305,23 @@ export default function RegisterPage() {
                                         value={name}
                                         onChange={(e) => setName(e.target.value)}
                                         onFocus={() => handleFocus("name")}
-                                        placeholder="Radhika Gupta"
+                                        placeholder="Rohan Kumar"
                                         autoComplete="name"
+                                        className="w-full bg-transparent text-sm text-ink2 outline-none placeholder:text-muted/60"
+                                    />
+                                </div>
+                            </FieldShell>
+
+                            <FieldShell label="$ username">
+                                <div className="flex items-center gap-2 rounded-md border border-line bg-ink px-3.5 py-2.5 transition-colors focus-within:border-pink">
+                                    <FiUser size={15} className="text-muted" />
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        onFocus={() => handleFocus("username")}
+                                        placeholder="rohankumar"
+                                        autoComplete="username"
                                         className="w-full bg-transparent text-sm text-ink2 outline-none placeholder:text-muted/60"
                                     />
                                 </div>
@@ -262,7 +364,6 @@ export default function RegisterPage() {
                                     </button>
                                 </div>
 
-                                {/* strength meter */}
                                 {password.length > 0 && (
                                     <div className="mt-2 flex items-center gap-2">
                                         <div className="flex flex-1 gap-1">
@@ -350,20 +451,38 @@ export default function RegisterPage() {
                         <div className="grid grid-cols-2 gap-3">
                             <button
                                 type="button"
-                                onClick={() => handleOAuth("github")}
+                                onClick={handleGithubAuth}
                                 className="flex items-center justify-center gap-2 rounded-md border border-line bg-surface2 py-2.5 text-sm text-ink2 transition-colors hover:border-muted"
                             >
                                 <FaGithub size={16} />
                                 GitHub
                             </button>
-                            <button
-                                type="button"
-                                onClick={() => handleOAuth("google")}
-                                className="flex items-center justify-center gap-2 rounded-md border border-line bg-surface2 py-2.5 text-sm text-ink2 transition-colors hover:border-muted"
-                            >
-                                <FaGoogle size={15} />
-                                Google
-                            </button>
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    className="pointer-events-none flex w-full items-center justify-center gap-2 rounded-md border border-line bg-surface2 py-2.5 text-sm text-ink2 transition-colors"
+                                >
+                                    <FaGoogle size={16} />
+                                    Google
+                                </button>
+                                <div className="absolute inset-0 overflow-hidden opacity-0">
+                                    <GoogleLogin
+                                        onSuccess={handleGoogleSuccess}
+                                        onError={() => {
+                                            pushLog(
+                                                "✗ google authentication failed",
+                                                "error"
+                                            );
+                                            setStatus("error");
+                                            toast.error(
+                                                "Google authentication failed"
+                                            );
+                                        }}
+                                        useOneTap={false}
+                                        width="500"
+                                    />
+                                </div>
+                            </div>
                         </div>
                         <div
                             ref={logRef}
@@ -379,9 +498,9 @@ export default function RegisterPage() {
 
                         <p className="mt-6 text-center text-sm text-muted">
                             Already have an account?{" "}
-                            <a href="#login" className="text-pink hover:underline">
+                            <Link to="/user-login" className="text-pink hover:underline">
                                 Sign in
-                            </a>
+                            </Link>
                         </p>
                     </div>
                 </motion.div>

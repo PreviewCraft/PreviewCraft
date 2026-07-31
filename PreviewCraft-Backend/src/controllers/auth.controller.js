@@ -47,7 +47,7 @@ const registerUser = asyncHandler(async (req, res) => {
     const avatarLocalPath = req.files?.avatar?.[0]?.path;
 
     let avatar;
-    if(avatarLocalPath) avatar = await uploadOnCloudinary(avatarLocalPath);
+    if (avatarLocalPath) avatar = await uploadOnCloudinary(avatarLocalPath);
 
     const user = await User.create({
         fullname,
@@ -57,22 +57,24 @@ const registerUser = asyncHandler(async (req, res) => {
         username: username.toLowerCase()
     })
 
-    const verificationToken = crypto.randomBytes(32).toString("hex");
-    const hashedToken = crypto
+    const otp = crypto.randomInt(100000, 1000000).toString();
+
+    const hashedOtp = crypto
         .createHash("sha256")
-        .update(verificationToken)
+        .update(otp)
         .digest("hex");
-    user.emailVerificationToken = hashedToken;
+
+    user.emailVerificationToken = hashedOtp;
+
     user.emailVerificationExpiry = new Date(
-        Date.now() + 30 * 60 * 1000
+        Date.now() + 10 * 60 * 1000
     );
+
     await user.save({
-        validateBeforeSave: false
+        validateBeforeSave: false,
     });
-    await sendVerificationEmail(
-        user.email,
-        verificationToken
-    );
+
+    await sendVerificationEmail(user.email, otp);
 
     const createdUser = await User.findById(user._id).select(
         "-password -refreshToken"
@@ -91,35 +93,97 @@ const registerUser = asyncHandler(async (req, res) => {
 })
 
 const verifyEmail = asyncHandler(async (req, res) => {
-    const { token } = req.params;
-    const hashedToken = crypto
+    const { email, otp } = req.body;
+
+    if (!email || !otp) {
+        throw new ApiError(
+            400,
+            "Email and verification code are required"
+        );
+    }
+
+    const hashedOtp = crypto
         .createHash("sha256")
-        .update(token)
+        .update(String(otp).trim())
         .digest("hex");
+
     const user = await User.findOne({
-
-        emailVerificationToken: hashedToken,
-
+        email: email.toLowerCase().trim(),
+        emailVerificationToken: hashedOtp,
         emailVerificationExpiry: {
-            $gt: new Date()
-        }
-
+            $gt: new Date(),
+        },
     });
-    if (!user) throw new ApiError(400, "User can't be verified")
+
+    if (!user) {
+        throw new ApiError(
+            400,
+            "Invalid or expired verification code"
+        );
+    }
+
     user.isEmailVerified = true;
     user.emailVerificationToken = undefined;
     user.emailVerificationExpiry = undefined;
+
     await user.save({
-        validateBeforeSave: false
+        validateBeforeSave: false,
     });
+
     return res.status(200).json(
         new ApiResponse(
             200,
-            user,
+            {},
             "Email verified successfully"
         )
-    )
-})
+    );
+});
+
+const resendVerificationOtp = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        throw new ApiError(400, "Email is required");
+    }
+
+    const user = await User.findOne({
+        email: email.toLowerCase().trim(),
+    });
+
+    if (!user) {
+        throw new ApiError(404, "User not found");
+    }
+
+    if (user.isEmailVerified) {
+        throw new ApiError(400, "Email is already verified");
+    }
+
+    const otp = crypto.randomInt(100000, 1000000).toString();
+
+    const hashedOtp = crypto
+        .createHash("sha256")
+        .update(otp)
+        .digest("hex");
+
+    user.emailVerificationToken = hashedOtp;
+    user.emailVerificationExpiry = new Date(
+        Date.now() + 10 * 60 * 1000
+    );
+
+    await user.save({
+        validateBeforeSave: false,
+    });
+
+    await sendVerificationEmail(user.email, otp);
+
+    return res.status(200).json(
+        new ApiResponse(
+            200,
+            {},
+            "A new verification code has been sent"
+        )
+    );
+});
 
 const loginUser = asyncHandler(async (req, res) => {
     const { email, username, password } = req.body
@@ -326,23 +390,26 @@ const googleLogin = asyncHandler(async (req, res) => {
     });
 
     if (!user) {
+        const baseUsername = googleUser.email
+            .split("@")[0]
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "");
 
+        let username = baseUsername;
+        let counter = 1;
+        while (await User.exists({ username })) {
+            username = `${baseUsername}${counter}`;
+            counter++;
+        }
         user = await User.create({
-
             fullname: googleUser.fullname,
-
-            email: googleUser.email,
-
+            username,
+            email: googleUser.email.toLowerCase(),
             avatar: googleUser.avatar,
-
             googleId: googleUser.googleId,
-
             provider: "google",
-
             isEmailVerified: true,
-
         });
-
     }
 
     else {
@@ -391,58 +458,82 @@ const googleLogin = asyncHandler(async (req, res) => {
 });
 
 const forgotPassword = asyncHandler(async (req, res) => {
-
     const { email } = req.body;
 
     if (!email) {
         throw new ApiError(400, "Email is required");
     }
 
-    const user = await User.findOne({ email });
+    const normalizedEmail = email.toLowerCase().trim();
+
+    const user = await User.findOne({
+        email: normalizedEmail,
+    });
 
     if (!user) {
         throw new ApiError(404, "User not found");
     }
 
-    const resetToken = crypto
-        .randomBytes(32)
-        .toString("hex");
+    const otp = crypto.randomInt(100000, 1000000).toString();
 
-    const hashedToken = crypto
+    const hashedOtp = crypto
         .createHash("sha256")
-        .update(resetToken)
+        .update(otp)
         .digest("hex");
 
-    user.passwordResetToken = hashedToken;
-
+    user.passwordResetOtp = hashedOtp;
     user.passwordResetExpiry = new Date(
-        Date.now() + 30 * 60 * 1000
+        Date.now() + 10 * 60 * 1000
     );
 
     await user.save({
-        validateBeforeSave: false
+        validateBeforeSave: false,
     });
 
-    await sendResetPasswordEmail(
-        user.email,
-        resetToken
-    );
+    try {
+        await sendResetPasswordEmail(
+            user.email,
+            otp
+        );
+    } catch (error) {
+        user.passwordResetOtp = undefined;
+        user.passwordResetExpiry = undefined;
+
+        await user.save({
+            validateBeforeSave: false,
+        });
+
+        throw new ApiError(
+            500,
+            "Failed to send password reset code"
+        );
+    }
 
     return res.status(200).json(
         new ApiResponse(
             200,
             {},
-            "Password reset email sent."
+            "Password reset code sent to your email."
         )
     );
-
 });
 
 const resetPassword = asyncHandler(async (req, res) => {
+    console.log("BODY:", req.body);
 
-    const { token } = req.params;
+    const {
+        email,
+        otp,
+        password,
+        confirmPassword,
+    } = req.body || {};
 
-    const { password, confirmPassword } = req.body;
+    if (!email || !otp || !password || !confirmPassword) {
+        throw new ApiError(
+            400,
+            "Email, OTP, password and confirm password are required"
+        );
+    }
 
     if (password !== confirmPassword) {
         throw new ApiError(
@@ -451,33 +542,38 @@ const resetPassword = asyncHandler(async (req, res) => {
         );
     }
 
-    const hashedToken = crypto
+    const hashedOtp = crypto
         .createHash("sha256")
-        .update(token)
+        .update(String(otp).trim())
         .digest("hex");
 
     const user = await User.findOne({
+        email: email.trim().toLowerCase(),
 
-        passwordResetToken: hashedToken,
+        passwordResetOtp: hashedOtp,
 
         passwordResetExpiry: {
-            $gt: new Date()
-        }
-
+            $gt: new Date(),
+        },
     });
 
     if (!user) {
         throw new ApiError(
             400,
-            "Invalid or expired token"
+            "Invalid or expired reset code"
         );
     }
 
     user.password = password;
 
+    user.passwordResetOtp = undefined;
+    user.passwordResetExpiry = undefined;
+
+    // Remove old field left from token-based reset implementation
     user.passwordResetToken = undefined;
 
-    user.passwordResetExpiry = undefined;
+    // Optional but recommended: invalidate existing sessions
+    user.refreshToken = undefined;
 
     await user.save();
 
@@ -488,7 +584,6 @@ const resetPassword = asyncHandler(async (req, res) => {
             "Password reset successful"
         )
     );
-
 });
 
 export {
@@ -505,5 +600,6 @@ export {
     googleLogin,
     forgotPassword,
     resetPassword,
-    generateAccessAndRefreshToken
+    generateAccessAndRefreshToken,
+    resendVerificationOtp
 }

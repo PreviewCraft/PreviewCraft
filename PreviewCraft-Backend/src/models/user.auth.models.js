@@ -58,7 +58,7 @@ const userSchema = new mongoose.Schema({
         enum: ["local", "google", "github"],
         default: "local"
     },
-    passwordResetToken: {
+    passwordResetOtp: {
         type: String,
     },
     passwordResetExpiry: {
