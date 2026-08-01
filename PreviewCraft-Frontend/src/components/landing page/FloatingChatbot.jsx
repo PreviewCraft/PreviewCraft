@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, X, Send, ArrowUpRight } from "lucide-react";
+import { askAI } from "../../api/AiChatApi";
 
 const SUGGESTIONS = [
     "How does self-hosting work?",
@@ -30,17 +31,43 @@ export default function FloatingChatbot() {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
     }, [messages, typing]);
 
-    const sendMessage = (text) => {
+    const sendMessage = async (text) => {
         if (!text.trim()) return;
-        setMessages((m) => [...m, { role: "user", text }]);
+
+        setMessages((m) => [
+            ...m,
+            {
+                role: "user",
+                text,
+            },
+        ]);
+
         setInput("");
         setTyping(true);
 
-        setTimeout(() => {
-            const reply = CANNED_REPLIES[Math.floor(Math.random() * CANNED_REPLIES.length)];
+        try {
+            const res = await askAI(text);
+
+            setMessages((m) => [
+                ...m,
+                {
+                    role: "bot",
+                    text: res.data.data.reply,
+                },
+            ]);
+        } catch (err) {
+            console.error(err);
+
+            setMessages((m) => [
+                ...m,
+                {
+                    role: "bot",
+                    text: "Something went wrong.",
+                },
+            ]);
+        } finally {
             setTyping(false);
-            setMessages((m) => [...m, { role: "bot", text: reply }]);
-        }, 1100);
+        }
     };
 
     return (
@@ -79,8 +106,8 @@ export default function FloatingChatbot() {
                                 <div
                                     key={i}
                                     className={`max-w-[85%] text-sm leading-relaxed rounded-lg px-4 py-2.5 ${m.role === "bot"
-                                            ? "bg-surface2 text-ink2 self-start rounded-tl-sm"
-                                            : "bg-pink text-ink self-end rounded-tr-sm font-medium"
+                                        ? "bg-surface2 text-ink2 self-start rounded-tl-sm"
+                                        : "bg-pink text-ink self-end rounded-tr-sm font-medium"
                                         }`}
                                 >
                                     {m.text}
